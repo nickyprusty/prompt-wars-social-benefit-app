@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Camera, Phone, ShieldAlert, Activity, ClipboardList, RefreshCw } from "lucide-react";
+import { Camera, Phone, ShieldAlert, Activity, ClipboardList, RefreshCw, Languages, Globe } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,9 @@ export default function Home() {
   const [progress, setProgress] = useState(0);
   const [textMode, setTextMode] = useState(false);
   const [emergencyText, setEmergencyText] = useState("");
+  const [targetLanguage, setTargetLanguage] = useState("en");
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translatedResult, setTranslatedResult] = useState<TriageResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleGetLocation() {
@@ -127,6 +130,56 @@ export default function Home() {
     }
   };
 
+  const handleTranslate = async (lang: string) => {
+    if (lang === "en") {
+      setTranslatedResult(null);
+      setTargetLanguage("en");
+      return;
+    }
+
+    if (!result) return;
+    setTargetLanguage(lang);
+    setIsTranslating(true);
+
+    try {
+      // Translate analysis
+      const analysisRes = await fetch("/api/translate", {
+        method: "POST",
+        body: JSON.stringify({ text: result.analysis, targetLanguage: lang }),
+      });
+      const { translatedText: translatedAnalysis } = await analysisRes.json();
+
+      // Translate steps
+      const stepsPromises = result.immediate_steps.map((step) =>
+        fetch("/api/translate", {
+          method: "POST",
+          body: JSON.stringify({ text: step, targetLanguage: lang }),
+        }).then((res) => res.json())
+      );
+      const stepsResults = await Promise.all(stepsPromises);
+      const translatedSteps = stepsResults.map((r) => r.translatedText);
+
+      // Translate brief
+      const briefRes = await fetch("/api/translate", {
+        method: "POST",
+        body: JSON.stringify({ text: result.paramedic_brief, targetLanguage: lang }),
+      });
+      const { translatedText: translatedBrief } = await briefRes.json();
+
+      setTranslatedResult({
+        ...result,
+        analysis: translatedAnalysis,
+        immediate_steps: translatedSteps,
+        paramedic_brief: translatedBrief,
+      });
+    } catch (error) {
+      console.error("Translation failed:", error);
+      setErrorMsg("Translation service unavailable. Showing English.");
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
   const reset = () => {
     setUiState("IDLE");
     setResult(null);
@@ -135,6 +188,8 @@ export default function Home() {
     setProgress(0);
     setTextMode(false);
     setEmergencyText("");
+    setTargetLanguage("en");
+    setTranslatedResult(null);
   };
 
   const getUrgencyColor = (urgency: TriageResult["urgency"] | undefined) => {
@@ -273,15 +328,32 @@ export default function Home() {
 
             <Card className="border border-slate-200 shadow-xl bg-white overflow-hidden flex flex-col min-h-0">
               <div className={cn("px-6 py-4 flex items-center justify-between flex-shrink-0", getUrgencyColor(result.urgency))}>
-                <h2 className="text-2xl font-black uppercase tracking-wider">{result.urgency}</h2>
+                <div className="flex flex-col">
+                  <h2 className="text-2xl font-black uppercase tracking-wider">{result.urgency}</h2>
+                  <div className="flex items-center gap-2 mt-1">
+                    <select 
+                      className="bg-white/20 text-xs font-bold py-1 px-2 rounded border border-white/30 text-white focus:outline-none focus:ring-1 focus:ring-white/50"
+                      value={targetLanguage}
+                      onChange={(e) => handleTranslate(e.target.value)}
+                      disabled={isTranslating}
+                    >
+                      <option value="en" className="text-slate-900">English</option>
+                      <option value="hi" className="text-slate-900">Hindi (हिंदी)</option>
+                      <option value="es" className="text-slate-900">Spanish (Español)</option>
+                    </select>
+                    {isTranslating && <RefreshCw className="w-3 h-3 animate-spin text-white" />}
+                  </div>
+                </div>
                 <Activity className="w-8 h-8" />
               </div>
               <CardContent className="pt-6 space-y-6 overflow-y-auto flex-1 min-h-0">
                 <div>
                   <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-widest mb-2 flex items-center">
-                    <ShieldAlert className="w-4 h-4 mr-2" /> Analysis
+                    <ShieldAlert className="w-4 h-4 mr-2" /> {targetLanguage === "en" ? "Analysis" : <Languages className="w-4 h-4 mr-2" />}
                   </h3>
-                  <p className="text-lg font-medium leading-snug text-slate-800">{result.analysis}</p>
+                  <p className="text-lg font-medium leading-snug text-slate-800">
+                    {translatedResult ? translatedResult.analysis : result.analysis}
+                  </p>
                 </div>
 
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex-shrink-0">
@@ -289,7 +361,7 @@ export default function Home() {
                     <ClipboardList className="w-4 h-4 mr-2" /> Immediate Steps
                   </h3>
                   <ul className="space-y-3">
-                    {result.immediate_steps.map((step, idx) => (
+                    {(translatedResult || result).immediate_steps.map((step, idx) => (
                       <li key={idx} className="flex gap-3 text-base">
                         <Badge variant="outline" className="h-6 w-6 rounded-full flex items-center justify-center p-0 flex-shrink-0 border-blue-200 text-blue-700 bg-blue-50">
                           {idx + 1}
@@ -316,7 +388,7 @@ export default function Home() {
                     result.urgency === "URGENT" ? "text-amber-950" :
                     "text-cyan-900"
                   )}>
-                    "{result.paramedic_brief}"
+                    "{(translatedResult || result).paramedic_brief}"
                   </AlertDescription>
                 </Alert>
               </CardContent>

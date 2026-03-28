@@ -22,8 +22,9 @@ We use a **hybrid system** to combine AI reasoning with explicit business rules:
 5. **Hospital Lookup:** The user can optionally use their device's geolocation to find the top 3 nearest hospitals via the Google Maps Places API.
 
 ## 6. Google Services Used
-- **Google Gemini (2.0 Flash):** Core reasoning engine for multimodal context extraction securely structured into a Zod schema.
+- **Google Gemini (2.5 Flash):** Core reasoning engine for multimodal context extraction securely structured into a Zod schema.
 - **Google Maps Places API:** Real-time geolocation-based hospital discovery providing immediate nearby professional help options.
+- **Cloud Translation API:** Multilingual support to improve accessibility for non-English users in high-stress emergency scenarios.
 - **Google Cloud Run:** Fully managed deployment infrastructure ensuring fast and scalable hosting.
 
 ## 7. Safety Boundaries
