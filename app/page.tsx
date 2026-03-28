@@ -12,8 +12,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 
-import { submitTriageImage, submitTriageText, TriageResult } from "./actions/triage";
+import { submitTriageImage, submitTriageText, TriageResult, transcribeAudio } from "./actions/triage";
 import { getNearbyHospitals } from "./actions/hospitals";
+import { AudioInput } from "@/components/AudioInput";
 
 type HospitalResult = {
   name: string;
@@ -68,6 +69,7 @@ export default function Home() {
   const [targetLanguage, setTargetLanguage] = useState("en");
   const [isTranslating, setIsTranslating] = useState(false);
   const [translatedResult, setTranslatedResult] = useState<TriageResult | null>(null);
+  const [voiceTranscript, setVoiceTranscript] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleGetLocation() {
@@ -121,8 +123,13 @@ export default function Home() {
         
         const compressedBase64 = await compressImage(base64String);
         setProgress(60);
-
-        const triageData = await submitTriageImage(compressedBase64, "image/jpeg");
+        
+        const triageData = await submitTriageImage(
+          compressedBase64, 
+          "image/jpeg", 
+          emergencyText || undefined, 
+          voiceTranscript || undefined
+        );
         setResult(triageData);
         setProgress(100);
 
@@ -150,7 +157,7 @@ export default function Home() {
     setProgress(30);
 
     try {
-      const triageData = await submitTriageText(emergencyText);
+      const triageData = await submitTriageText(emergencyText, voiceTranscript);
       setResult(triageData);
       setProgress(100);
 
@@ -225,6 +232,7 @@ export default function Home() {
     setEmergencyText("");
     setTargetLanguage("en");
     setTranslatedResult(null);
+    setVoiceTranscript("");
   };
 
   const getUrgencyColor = (urgency: TriageResult["urgency"] | undefined) => {
@@ -308,6 +316,15 @@ export default function Home() {
                     Submit
                   </Button>
                 </div>
+              </motion.div>
+            )}
+
+            {!textMode && (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full">
+                <AudioInput 
+                  onTranscriptReady={setVoiceTranscript} 
+                  onClear={() => setVoiceTranscript("")} 
+                />
               </motion.div>
             )}
           </motion.div>

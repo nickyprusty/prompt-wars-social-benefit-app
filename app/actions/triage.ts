@@ -18,7 +18,8 @@ export type TriageResult = {
 export async function submitTriageImage(
   base64Image: string,
   mimeType: string,
-  note?: string
+  note?: string,
+  voiceTranscript?: string
 ): Promise<TriageResult> {
   if (!apiKey) {
     throw new Error("GEMINI_API_KEY is not configured on the server.");
@@ -52,11 +53,16 @@ export async function submitTriageImage(
     });
 
     const prompt = `
-    Analyze this image of a medical situation/incident.
+    Analyze this medical situation based on an image and optional context.
+    
+    Context provided by user:
+    - Typed Note: ${note || "None"}
+    - Voice Transcript: ${voiceTranscript || "None"}
+
     Act as an emergency intake triage assistant.
     Return a strictly structured JSON response matching this exact schema:
-    - "userProvidedSummary": string (leave empty if none provided)
-    - "visualObservations": string (1-2 short bullet points max)
+    - "userProvidedSummary": string (Summarize the situation based on the note and transcript)
+    - "visualObservations": string (1-2 short bullet points max based on image)
     - "inferredConcerns": string (1 concise sentence max)
     - "urgency": "CRITICAL", "URGENT", "STABLE", or "UNKNOWN"
     - "recommendedActions": array of exactly 3 short action strings
@@ -86,8 +92,8 @@ export async function submitTriageImage(
     const validatedData = validateTriageResponse(parsedData);
 
     // Evaluate rules to potentially override urgency.
-    // If no note was provided, we use the model's visual observations text.
-    const textContext = note || `${validatedData.visualObservations} ${validatedData.inferredConcerns}`;
+    // If no note or transcript was provided, we use the model's visual observations text.
+    const textContext = `${note || ""} ${voiceTranscript || ""}`.trim() || `${validatedData.visualObservations} ${validatedData.inferredConcerns}`;
     const finalUrgency = overrideUrgency(textContext, validatedData.urgency);
 
     return {
@@ -107,7 +113,8 @@ export async function submitTriageImage(
 }
 
 export async function submitTriageText(
-  description: string
+  description: string,
+  voiceTranscript?: string
 ): Promise<TriageResult> {
   if (!apiKey) {
     throw new Error("GEMINI_API_KEY is not configured on the server.");
@@ -128,9 +135,14 @@ export async function submitTriageText(
     const prompt = `
     Analyze the following explicitly described medical situation/incident.
     Act as an emergency intake triage assistant.
+
+    Context provided by user:
+    - Typed Description: ${description}
+    - Voice Transcript: ${voiceTranscript || "None"}
+
     Return a strictly structured JSON response matching this exact schema:
-    - "userProvidedSummary": string
-    - "visualObservations": string (1-2 short bullet points max describing the key stated symptoms)
+    - "userProvidedSummary": string (Summarize the situation based on the description and transcript)
+    - "visualObservations": string (1-2 short bullet points max describing the key symptoms mentioned)
     - "inferredConcerns": string (1 concise sentence max)
     - "urgency": "CRITICAL", "URGENT", "STABLE", or "UNKNOWN"
     - "recommendedActions": array of exactly 3 short action strings
@@ -144,8 +156,7 @@ export async function submitTriageText(
 
     const result = (await Promise.race([
       model.generateContent([
-        prompt,
-        `User's Emergency Description:\n${description}`,
+        prompt
       ]),
       timeoutPromise
     ])) as any;
@@ -153,7 +164,7 @@ export async function submitTriageText(
     const parsedData = JSON.parse(responseText);
 
     const validatedData = validateTriageResponse(parsedData);
-    const textContext = `${description} ${validatedData.visualObservations} ${validatedData.inferredConcerns}`;
+    const textContext = `${description} ${voiceTranscript || ""} ${validatedData.visualObservations} ${validatedData.inferredConcerns}`.trim();
     const finalUrgency = overrideUrgency(textContext, validatedData.urgency);
 
     return {
@@ -169,5 +180,11 @@ export async function submitTriageText(
     console.error("Text Triage Error:", error);
     throw new Error("Failed to process text triage. Please try again.");
   }
+}
+
+import { transcribeAudio as _transcribeAudio } from "@/lib/speech";
+
+export async function transcribeAudio(base64Audio: string, mimeType: string) {
+  return await _transcribeAudio(base64Audio, mimeType);
 }
 

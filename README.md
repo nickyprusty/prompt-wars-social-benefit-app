@@ -15,16 +15,16 @@ We use a **hybrid system** to combine AI reasoning with explicit business rules:
 - **Rules (Urgency Override):** A deterministic rule engine guarantees critical conditions. If the AI's textual analysis contains explicit trigger phrases (like "not responding", "unconscious", "chest pain"), strict logic safely overrides the AI and forces an `"immediate"` urgency state.
 
 ## 5. How the App Works
-1. **Upload:** User captures or uploads a photo of the medical scene.
-2. **Analysis:** The image is sent to the backend where Gemini interprets it securely.
-3. **Rule Enforcement:** The textual interpretation runs through our overriding rules validation logic.
-4. **Display:** The user receives a bold interface detailing urgency, 3 immediate life-saving actions, and a professional paramedic handoff brief.
-5. **Hospital Lookup:** The user can optionally use their device's geolocation to find the top 3 nearest hospitals via the Google Maps Places API.
+- 🚑 **AI-Powered Triage**: Uses Gemini 2.5 Flash to analyze medical situations from images and text.
+- 🎙️ **Voice Input Support**: Record or upload audio for hands-free intake, transcribed via Google Speech-to-Text.
+- 🏥 **Nearby Hospitals**: Automatic lookup of the top 3 closest medical facilities using Google Maps Places API.
 
 ## 6. Google Services Used
-- **Google Gemini (2.5 Flash):** Core reasoning engine for multimodal context extraction securely structured into a Zod schema.
-- **Google Maps Places API:** Real-time geolocation-based hospital discovery providing immediate nearby professional help options.
-- **Cloud Translation API:** Multilingual support to improve accessibility for non-English users in high-stress emergency scenarios.
+### Google Cloud & AI Services
+- **Gemini 2.5 Flash**: Multi-modal reasoning (Image + Text + Voice).
+- **Google Speech-to-Text**: Automatic transcription of emergency voice notes.
+- **Google Maps Places API**: Real-time hospital search.
+- **Google Cloud Translation**: Multi-lingual support for triage results.
 - **Google Cloud Run:** Fully managed deployment infrastructure ensuring fast and scalable hosting.
 
 ## 7. Safety Boundaries
