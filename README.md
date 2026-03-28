@@ -35,7 +35,16 @@ We use a **hybrid system** to combine AI reasoning with explicit business rules:
 - The tool's interpretation relies strictly on the current image. It cannot review medical history.
 - The outcome depends heavily on the visual quality and clarity of the provided image.
 
-## 9. Testing
+## 9. Efficiency Optimizations
+
+This application has been optimized for performance and resource usage:
+
+- **Early Validation**: API requests are validated immediately for empty content or invalid file types, preventing unnecessary model calls.
+- **Client-Side Compression**: Images are resized and compressed in the browser before upload, significantly reducing payload size and network latency.
+- **Timeout Protection**: All Gemini model calls are wrapped in a 15-second timeout to prevent requests from stalling.
+- **Lightweight Architecture**: Single-call triage logic and efficient state management keep resource usage low.
+
+## 10. Testing
 Testing is kept lightweight and focused on rule overriding and schema validation using native Node `node:test`.
 
 **Manual Test Scenarios:**

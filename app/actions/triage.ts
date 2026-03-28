@@ -23,6 +23,10 @@ export async function submitTriageImage(
   if (!apiKey) {
     throw new Error("GEMINI_API_KEY is not configured on the server.");
   }
+
+  if (!base64Image || base64Image.trim() === "") {
+    throw new Error("No image data provided for triage.");
+  }
   
   // Security: Allow only image mime types
   const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heif", "image/heic"];
@@ -67,7 +71,14 @@ export async function submitTriageImage(
       },
     };
 
-    const result = await model.generateContent([prompt, imagePart]);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error("TIMEOUT")), 15000)
+    );
+
+    const result = (await Promise.race([
+      model.generateContent([prompt, imagePart]),
+      timeoutPromise
+    ])) as any;
     const responseText = result.response.text();
     const parsedData = JSON.parse(responseText);
 
@@ -86,9 +97,12 @@ export async function submitTriageImage(
       paramedic_brief: validatedData.handoffSummary
     };
   } catch (error) {
-    console.error("Triage Error:", error);
+    if (error instanceof Error && error.message === "TIMEOUT") {
+      throw new Error("Analysis took too long. Please retry or contact emergency services if critical.");
+    }
+    console.error("DEBUG - Triage Execution Error:", error);
     // Return safe fallback error
-    throw new Error("Failed to process triage image or result was invalid.");
+    throw new Error("Failed to process triage image. Please try again or call 911.");
   }
 }
 
@@ -97,6 +111,10 @@ export async function submitTriageText(
 ): Promise<TriageResult> {
   if (!apiKey) {
     throw new Error("GEMINI_API_KEY is not configured on the server.");
+  }
+
+  if (!description || description.trim() === "") {
+    throw new Error("Emergency description cannot be empty.");
   }
 
   try {
@@ -120,10 +138,17 @@ export async function submitTriageText(
     - "disclaimer": string
     `;
 
-    const result = await model.generateContent([
-      prompt,
-      `User's Emergency Description:\n${description}`,
-    ]);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error("TIMEOUT")), 15000)
+    );
+
+    const result = (await Promise.race([
+      model.generateContent([
+        prompt,
+        `User's Emergency Description:\n${description}`,
+      ]),
+      timeoutPromise
+    ])) as any;
     const responseText = result.response.text();
     const parsedData = JSON.parse(responseText);
 
@@ -138,8 +163,11 @@ export async function submitTriageText(
       paramedic_brief: validatedData.handoffSummary,
     };
   } catch (error) {
+    if (error instanceof Error && error.message === "TIMEOUT") {
+      throw new Error("Analysis took too long. Please retry or contact emergency services if critical.");
+    }
     console.error("Text Triage Error:", error);
-    throw new Error("Failed to process text triage or result was invalid.");
+    throw new Error("Failed to process text triage. Please try again.");
   }
 }
 

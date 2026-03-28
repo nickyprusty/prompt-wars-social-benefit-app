@@ -24,6 +24,38 @@ type HospitalResult = {
 
 type UIState = "IDLE" | "THINKING" | "RESULT" | "ERROR";
 
+const compressImage = async (base64Str: string): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const MAX_WIDTH = 1200;
+      const MAX_HEIGHT = 1200;
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > MAX_WIDTH) {
+          height *= MAX_WIDTH / width;
+          width = MAX_WIDTH;
+        }
+      } else {
+        if (height > MAX_HEIGHT) {
+          width *= MAX_HEIGHT / height;
+          height = MAX_HEIGHT;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx?.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', 0.7));
+    };
+    img.src = base64Str;
+  });
+};
+
 export default function Home() {
   const [uiState, setUiState] = useState<UIState>("IDLE");
   const [result, setResult] = useState<TriageResult | null>(null);
@@ -85,9 +117,12 @@ export default function Home() {
     reader.onload = async (event) => {
       try {
         const base64String = event.target?.result as string;
+        setProgress(40);
+        
+        const compressedBase64 = await compressImage(base64String);
         setProgress(60);
 
-        const triageData = await submitTriageImage(base64String, file.type);
+        const triageData = await submitTriageImage(compressedBase64, "image/jpeg");
         setResult(triageData);
         setProgress(100);
 
@@ -265,8 +300,12 @@ export default function Home() {
                   <Button variant="outline" className="flex-1 shadow-sm h-14 rounded-xl font-bold text-lg" onClick={() => setTextMode(false)}>
                     Cancel
                   </Button>
-                  <Button className="flex-1 bg-slate-900 text-white hover:bg-slate-800 shadow-xl h-14 rounded-xl font-bold text-lg" onClick={handleTextSubmit}>
-                    Submit Description
+                  <Button 
+                    className="flex-1 bg-slate-900 text-white hover:bg-slate-800 shadow-xl h-14 rounded-xl font-bold text-lg" 
+                    onClick={handleTextSubmit}
+                    disabled={!emergencyText.trim()}
+                  >
+                    Submit
                   </Button>
                 </div>
               </motion.div>
