@@ -52,8 +52,8 @@ export async function submitTriageImage(
     Act as an emergency intake triage assistant.
     Return a strictly structured JSON response matching this exact schema:
     - "userProvidedSummary": string (leave empty if none provided)
-    - "visualObservations": string
-    - "inferredConcerns": string
+    - "visualObservations": string (1-2 short bullet points max)
+    - "inferredConcerns": string (1 concise sentence max)
     - "urgency": "CRITICAL", "URGENT", "STABLE", or "UNKNOWN"
     - "recommendedActions": array of exactly 3 short action strings
     - "handoffSummary": a professional 2-sentence summary for paramedics
@@ -91,3 +91,55 @@ export async function submitTriageImage(
     throw new Error("Failed to process triage image or result was invalid.");
   }
 }
+
+export async function submitTriageText(
+  description: string
+): Promise<TriageResult> {
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not configured on the server.");
+  }
+
+  try {
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      generationConfig: {
+        responseMimeType: "application/json",
+      },
+    });
+
+    const prompt = `
+    Analyze the following explicitly described medical situation/incident.
+    Act as an emergency intake triage assistant.
+    Return a strictly structured JSON response matching this exact schema:
+    - "userProvidedSummary": string
+    - "visualObservations": string (1-2 short bullet points max describing the key stated symptoms)
+    - "inferredConcerns": string (1 concise sentence max)
+    - "urgency": "CRITICAL", "URGENT", "STABLE", or "UNKNOWN"
+    - "recommendedActions": array of exactly 3 short action strings
+    - "handoffSummary": a professional 2-sentence summary for paramedics
+    - "disclaimer": string
+    `;
+
+    const result = await model.generateContent([
+      prompt,
+      `User's Emergency Description:\n${description}`,
+    ]);
+    const responseText = result.response.text();
+    const parsedData = JSON.parse(responseText);
+
+    const validatedData = validateTriageResponse(parsedData);
+    const textContext = `${description} ${validatedData.visualObservations} ${validatedData.inferredConcerns}`;
+    const finalUrgency = overrideUrgency(textContext, validatedData.urgency);
+
+    return {
+      urgency: finalUrgency as TriageResult["urgency"],
+      analysis: `${validatedData.visualObservations} ${validatedData.inferredConcerns}`,
+      immediate_steps: validatedData.recommendedActions,
+      paramedic_brief: validatedData.handoffSummary,
+    };
+  } catch (error) {
+    console.error("Text Triage Error:", error);
+    throw new Error("Failed to process text triage or result was invalid.");
+  }
+}
+

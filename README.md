@@ -19,9 +19,11 @@ We use a **hybrid system** to combine AI reasoning with explicit business rules:
 2. **Analysis:** The image is sent to the backend where Gemini interprets it securely.
 3. **Rule Enforcement:** The textual interpretation runs through our overriding rules validation logic.
 4. **Display:** The user receives a bold interface detailing urgency, 3 immediate life-saving actions, and a professional paramedic handoff brief.
+5. **Hospital Lookup:** The user can optionally use their device's geolocation to find the top 3 nearest hospitals via the Google Maps Places API.
 
 ## 6. Google Services Used
-- **Google Gemini (1.5 Flash):** Core reasoning engine for multimodal context extraction securely structured into a Zod schema.
+- **Google Gemini (2.0 Flash):** Core reasoning engine for multimodal context extraction securely structured into a Zod schema.
+- **Google Maps Places API:** Real-time geolocation-based hospital discovery providing immediate nearby professional help options.
 - **Google Cloud Run:** Fully managed deployment infrastructure ensuring fast and scalable hosting.
 
 ## 7. Safety Boundaries
@@ -44,14 +46,14 @@ Testing is kept lightweight and focused on rule overriding and schema validation
 ## 10. Security Considerations
 - **No Persistent Storage:** We do not save or log images; data lives temporarily in memory and is immediately discarded.
 - **Minimal Asset Processing:** Strict limits enforce files > 10MB or invalid non-image mime types are dropped before hitting the AI model.
-- **Durable Environment Variables:** Keys (e.g., `GEMINI_API_KEY`) run entirely server-side and are safely modeled in `.env.example`.
+- **Durable Environment Variables:** Keys (e.g., `GEMINI_API_KEY`, `GOOGLE_MAPS_API_KEY`) run entirely server-side and are safely modeled in `.env.example`.
 
 ## 11. How to Run Locally
 
 First, clone and set your environment variables:
 ```bash
 cp .env.example .env
-# Add your GEMINI_API_KEY to the .env file
+# Add your GEMINI_API_KEY and GOOGLE_MAPS_API_KEY to the .env file
 ```
 
 Run instructions:

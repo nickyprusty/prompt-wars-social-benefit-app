@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Camera, Phone, ShieldAlert, Activity, ClipboardList, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -12,16 +12,64 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 
-import { submitTriageImage, TriageResult } from "./actions/triage";
+import { submitTriageImage, submitTriageText, TriageResult } from "./actions/triage";
+import { getNearbyHospitals } from "./actions/hospitals";
+
+type HospitalResult = {
+  name: string;
+  address: string;
+  maps_link: string;
+  rating?: number;
+};
 
 type UIState = "IDLE" | "THINKING" | "RESULT" | "ERROR";
 
 export default function Home() {
   const [uiState, setUiState] = useState<UIState>("IDLE");
   const [result, setResult] = useState<TriageResult | null>(null);
+  const [hospitals, setHospitals] = useState<HospitalResult[]>([]);
+  const [locatingStatus, setLocatingStatus] = useState<"IDLE" | "LOCATING" | "FETCHING" | "ERROR" | "SUCCESS">("IDLE");
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [progress, setProgress] = useState(0);
+  const [textMode, setTextMode] = useState(false);
+  const [emergencyText, setEmergencyText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function handleGetLocation() {
+    if (!navigator.geolocation) {
+      setErrorMsg("Geolocation is not supported by your browser.");
+      setLocatingStatus("ERROR");
+      return;
+    }
+
+    setLocatingStatus("LOCATING");
+    
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        setLocatingStatus("FETCHING");
+        try {
+          const { latitude, longitude } = position.coords;
+          const { hospitals: foundHospitals, error: hospitalError } = await getNearbyHospitals(latitude, longitude);
+          
+          if (hospitalError) {
+            console.warn(hospitalError);
+            setLocatingStatus("ERROR"); 
+          } else {
+            setHospitals(foundHospitals);
+            setLocatingStatus("SUCCESS");
+          }
+        } catch (err) {
+          console.error("Failed to fetch hospitals:", err);
+          setLocatingStatus("ERROR");
+        }
+      },
+      (error) => {
+        console.error("Geolocation error:", error);
+        setLocatingStatus("ERROR");
+      },
+      { timeout: 10000 }
+    );
+  }
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -40,7 +88,10 @@ export default function Home() {
         setResult(triageData);
         setProgress(100);
 
-        setTimeout(() => setUiState("RESULT"), 500); // Smooth transition
+        setTimeout(() => {
+          setUiState("RESULT");
+          handleGetLocation();
+        }, 500); // Smooth transition
       } catch (error) {
         console.error(error);
         setErrorMsg("Failed to analyze image. Please try again or Call 911 immediately if critical.");
@@ -54,10 +105,36 @@ export default function Home() {
     reader.readAsDataURL(file);
   };
 
+  const handleTextSubmit = async () => {
+    if (!emergencyText.trim()) return;
+    
+    setUiState("THINKING");
+    setProgress(30);
+
+    try {
+      const triageData = await submitTriageText(emergencyText);
+      setResult(triageData);
+      setProgress(100);
+
+      setTimeout(() => {
+        setUiState("RESULT");
+        handleGetLocation(); // Auto-fetch location
+      }, 500); // Smooth transition
+    } catch (error) {
+      console.error(error);
+      setErrorMsg("Failed to analyze emergency description.");
+      setUiState("ERROR");
+    }
+  };
+
   const reset = () => {
     setUiState("IDLE");
     setResult(null);
+    setHospitals([]);
+    setLocatingStatus("IDLE");
     setProgress(0);
+    setTextMode(false);
+    setEmergencyText("");
   };
 
   const getUrgencyColor = (urgency: TriageResult["urgency"] | undefined) => {
@@ -103,13 +180,42 @@ export default function Home() {
 
             <Button
               size="lg"
-              className="w-full h-32 text-2xl font-bold bg-blue-600 text-white hover:bg-blue-700 rounded-3xl shadow-[0_10px_40px_rgba(37,99,235,0.3)] active:scale-95 transition-all"
+              className={cn("w-full h-32 text-2xl font-bold bg-blue-600 text-white hover:bg-blue-700 rounded-3xl shadow-[0_10px_40px_rgba(37,99,235,0.3)] active:scale-95 transition-all", textMode && "hidden")}
               onClick={() => fileInputRef.current?.click()}
               aria-label="Take Photo for Triage Analysis"
             >
               <Camera className="mr-3 w-8 h-8" />
-              UPLOAD PHOTO
+              TAKE OR UPLOAD PHOTO
             </Button>
+
+            {!textMode ? (
+              <Button variant="ghost" className="text-slate-500 font-semibold" onClick={() => setTextMode(true)}>
+                Or describe emergency in text
+              </Button>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                className="w-full space-y-4"
+              >
+                <textarea
+                  className="w-full p-4 border-2 border-slate-300 rounded-2xl resize-none text-lg text-slate-800 focus:outline-none focus:border-blue-500 bg-white shadow-inner placeholder-slate-400"
+                  rows={4}
+                  placeholder="Describe the emergency (e.g. Severe chest pain, bleeding from leg...)"
+                  value={emergencyText}
+                  onChange={(e) => setEmergencyText(e.target.value)}
+                  aria-label="Describe emergency"
+                />
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1 shadow-sm h-14 rounded-xl font-bold text-lg" onClick={() => setTextMode(false)}>
+                    Cancel
+                  </Button>
+                  <Button className="flex-1 bg-slate-900 text-white hover:bg-slate-800 shadow-xl h-14 rounded-xl font-bold text-lg" onClick={handleTextSubmit}>
+                    Submit Description
+                  </Button>
+                </div>
+              </motion.div>
+            )}
           </motion.div>
         )}
 
@@ -125,7 +231,7 @@ export default function Home() {
           >
             <div className="text-center space-y-4">
               <RefreshCw className="w-16 h-16 mx-auto text-primary animate-spin" />
-              <h2 className="text-2xl font-bold animate-pulse">Gemini is analyzing urgency...</h2>
+              <h2 className="text-2xl font-bold animate-pulse">Medical AI is analyzing urgency...</h2>
             </div>
 
             <div className="space-y-4">
@@ -194,12 +300,85 @@ export default function Home() {
                   </ul>
                 </div>
 
-                <Alert className="bg-cyan-50 border-cyan-200 flex-shrink-0">
-                  <AlertTitle className="text-cyan-800 font-bold mb-2">Paramedic Handoff Brief</AlertTitle>
-                  <AlertDescription className="text-cyan-900 text-sm leading-relaxed">
+                <Alert className={cn(
+                  "flex-shrink-0",
+                  (result.urgency === "CRITICAL" || result.urgency === "immediate") ? "bg-red-50 border-red-200" :
+                  result.urgency === "URGENT" ? "bg-amber-50 border-amber-200" :
+                  "bg-cyan-50 border-cyan-200"
+                )}>
+                  <AlertTitle className={cn("font-bold mb-2",
+                    (result.urgency === "CRITICAL" || result.urgency === "immediate") ? "text-red-900" :
+                    result.urgency === "URGENT" ? "text-amber-900" :
+                    "text-cyan-800"
+                  )}>Paramedic Handoff Brief</AlertTitle>
+                  <AlertDescription className={cn("text-sm leading-relaxed",
+                    (result.urgency === "CRITICAL" || result.urgency === "immediate") ? "text-red-950" :
+                    result.urgency === "URGENT" ? "text-amber-950" :
+                    "text-cyan-900"
+                  )}>
                     "{result.paramedic_brief}"
                   </AlertDescription>
                 </Alert>
+              </CardContent>
+            </Card>
+
+            {/* Hospital Lookup Section */}
+            <Card className="border border-slate-200 shadow-md bg-white overflow-hidden flex flex-col min-h-0">
+              <CardHeader className="py-4 bg-slate-50 border-b border-slate-100 flex flex-row items-center justify-between">
+                <CardTitle className="text-lg font-bold flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-blue-600" />
+                  Nearby Medical Centers
+                </CardTitle>
+                {locatingStatus === "IDLE" && (
+                  <Button size="sm" variant="outline" onClick={handleGetLocation}>
+                    Find Hospitals
+                  </Button>
+                )}
+              </CardHeader>
+              <CardContent className="py-4">
+                {locatingStatus === "LOCATING" || locatingStatus === "FETCHING" ? (
+                  <div className="flex flex-col items-center gap-3 py-4">
+                    <RefreshCw className="w-8 h-8 text-blue-500 animate-spin" />
+                    <p className="text-sm font-medium text-slate-500">Retrieving your location...</p>
+                  </div>
+                ) : locatingStatus === "SUCCESS" && hospitals.length > 0 ? (
+                  <div className="space-y-4">
+                    {hospitals.map((hospital, idx) => (
+                      <div key={idx} className="flex flex-col gap-1 pb-3 last:pb-0 border-b last:border-0 border-slate-100">
+                        <div className="flex justify-between items-start">
+                          <h4 className="font-bold text-slate-800 leading-tight">{hospital.name}</h4>
+                          {hospital.rating && (
+                            <Badge variant="secondary" className="bg-amber-50 text-amber-700 border-amber-200 py-0 h-5">
+                              ★ {hospital.rating}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 mb-2">{hospital.address}</p>
+                        <Button 
+                          variant="link" 
+                          size="sm" 
+                          className="p-0 h-auto justify-start text-blue-600 font-semibold"
+                          asChild
+                        >
+                          <a href={hospital.maps_link} target="_blank" rel="noopener noreferrer">
+                            View on Google Maps →
+                          </a>
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : locatingStatus === "SUCCESS" && hospitals.length === 0 ? (
+                  <p className="text-center py-4 text-slate-500 text-sm">No nearby medical centers found in this area.</p>
+                ) : locatingStatus === "ERROR" ? (
+                  <div className="text-center py-4 space-y-2">
+                    <p className="text-slate-500 text-sm italic">Could not access location or find hospitals.</p>
+                    <Button size="sm" variant="ghost" onClick={handleGetLocation} className="text-xs">
+                      Retry Location Access
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-center py-4 text-slate-500 text-sm italic">Use your location to see the nearest professional help.</p>
+                )}
               </CardContent>
             </Card>
 
